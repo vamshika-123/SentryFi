@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pydantic
+pdfplumber
+pypdf
+pytesseract
+pillow
+python-multipart
+pytest
+httpx
+scikit-learn
+xgboost
+joblib
+numpy
+pandas
+tldextract
+scipy
