@@ -3,14 +3,14 @@ import sys
 import joblib
 
 # Need to ensure the 'ml' directory is in the python path
-# so that joblib can find `URLFeatureExtractor` which was defined in `train_phishing_model`.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+# so that joblib can find `URLFeatureExtractor` which was defined in `train_phishing`.
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 ML_DIR = os.path.join(BASE_DIR, 'ml')
 if ML_DIR not in sys.path:
     sys.path.append(ML_DIR)
 
 import __main__
-from train_phishing_model import URLFeatureExtractor
+from train_phishing import URLFeatureExtractor
 __main__.URLFeatureExtractor = URLFeatureExtractor
 
 class ModelRegistry:
@@ -20,7 +20,7 @@ class ModelRegistry:
         self.compliance_model = None
         
     def load_models(self):
-        models_dir = os.path.join(ML_DIR, 'models')
+        models_dir = os.path.join(BASE_DIR, 'models')
         
         phishing_path = os.path.join(models_dir, 'phishing_model.joblib')
         invoice_path = os.path.join(models_dir, 'invoice_model.joblib')

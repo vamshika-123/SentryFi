@@ -1,38 +1,31 @@
-# Node & Frontend dependencies
-frontend/node_modules/
-node_modules/
-dist/
-frontend/dist/
-.vite/
-frontend/.vite/
-
-# Python & ML artifacts/caches
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-*.pkl
+# Logs
+logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Virtual Environments
-venv/
-.venv/
-env/
-ENV/
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Environment variables
 .env
 .env.local
 .env.*.local
-frontend/.env
-frontend/.env.local
 !.env.example
-!frontend/.env.example
-
-# IDE & OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
