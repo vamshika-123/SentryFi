@@ -63,6 +63,8 @@ def process_invoice_file(file_bytes: bytes, filename: str) -> dict:
                         text += page_text + "\n"
         except Exception as e:
             print(f"PDF extraction failed: {e}")
+    elif filename.lower().endswith('.txt'):
+        text = file_bytes.decode('utf-8', errors='ignore')
     else:
         # Assume image
         try:
