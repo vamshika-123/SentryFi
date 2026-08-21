@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { uploadScanDocument } from '../../services/storageService';
 import { createScanRecord } from '../../services/firestoreService';
-import axios from 'axios';
+import apiClient from '../../services/apiClient';
 import { FileText, Loader2, UploadCloud, CheckCircle, ShieldAlert, FileSearch } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -51,7 +51,7 @@ export default function ComplianceScanner() {
         config.headers['Content-Type'] = 'multipart/form-data';
       }
       
-      const response = await axios.post('/api/v1/scan/compliance', payload, config);
+      const response = await apiClient.post('/v1/scan/compliance', payload, config);
       const data = response.data;
       setResult(data);
 
@@ -71,7 +71,7 @@ export default function ComplianceScanner() {
 
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || err.message || 'An error occurred during scanning.');
+      setError(err.message || 'An error occurred during scanning.');
     } finally {
       setLoading(false);
       setStatusMsg('');

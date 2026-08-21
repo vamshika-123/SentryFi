@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { uploadScanDocument } from '../../services/storageService';
 import { createScanRecord } from '../../services/firestoreService';
-import axios from 'axios';
+import apiClient from '../../services/apiClient';
 import { UploadCloud, FileText, CheckCircle, AlertTriangle, Loader2, FileWarning } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -47,7 +47,7 @@ export default function InvoiceScanner() {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await axios.post('/api/v1/scan/invoice', formData, {
+      const response = await apiClient.post('/v1/scan/invoice', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
@@ -70,7 +70,7 @@ export default function InvoiceScanner() {
 
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || err.message || 'An error occurred during scanning.');
+      setError(err.message || 'An error occurred during scanning.');
     } finally {
       setLoading(false);
       setStatusMsg('');

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { createScanRecord } from '../../services/firestoreService';
-import axios from 'axios';
+import apiClient from '../../services/apiClient';
 import { ShieldCheck, ShieldAlert, AlertTriangle, Link as LinkIcon, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -30,8 +30,7 @@ export default function PhishingScanner() {
     setResult(null);
 
     try {
-      // Proxy handles /api via Vite
-      const response = await axios.post('/api/v1/scan/phishing', { url });
+      const response = await apiClient.post('/v1/scan/phishing', { url });
       const data = response.data;
       setResult(data);
       
@@ -48,7 +47,7 @@ export default function PhishingScanner() {
       });
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || 'An error occurred during scanning.');
+      setError(err.message || 'An error occurred during scanning.');
     } finally {
       setLoading(false);
     }
