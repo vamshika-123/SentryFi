@@ -38,18 +38,18 @@ def parse_invoice_text(text: str) -> dict:
         subtotal = 1000.0
         tax_amount = 100.0
         
-    tax_percentage_variance = 0.0
+    tax_to_subtotal_ratio = 0.0
     if subtotal > 0:
-        expected_tax = subtotal * 0.10 # Assuming 10% base
-        tax_percentage_variance = abs((tax_amount / subtotal) * 100 - 10.0)
+        tax_to_subtotal_ratio = tax_amount / subtotal
+        
+    # amount_z_score is a dummy normalized value since we don't have the global mean here
+    amount_z_score = (subtotal - 500) / 300.0 if subtotal > 0 else 0.0
         
     return {
-        "subtotal": subtotal,
-        "tax_amount": tax_amount,
-        "tax_percentage_variance": tax_percentage_variance,
-        "line_item_delta": line_item_delta,
-        "round_number_bias": 1 if subtotal % 100 == 0 else 0,
-        "historical_vendor_variance": 0.0 # dummy
+        "tax_to_subtotal_ratio": tax_to_subtotal_ratio,
+        "line_item_sum_delta": line_item_delta,
+        "round_amount_score": 1 if subtotal % 100 == 0 else 0,
+        "amount_z_score": amount_z_score
     }
 
 def process_invoice_file(file_bytes: bytes, filename: str) -> dict:

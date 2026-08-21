@@ -108,9 +108,9 @@ async def scan_invoice(file: UploadFile = File(...)):
     
     explanations = []
     if is_anomaly:
-        if features_dict["line_item_delta"] > 0:
+        if features_dict.get("line_item_sum_delta", 0) > 0:
             explanations.append("Line items do not sum to total")
-        if features_dict["tax_percentage_variance"] > 5.0:
+        if features_dict.get("tax_to_subtotal_ratio", 0) > 0.15:
             explanations.append("Unusual tax amount variance")
             
     return {
