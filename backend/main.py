@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 import pandas as pd
@@ -122,8 +122,6 @@ async def scan_invoice(file: UploadFile = File(...)):
 
 class ComplianceRequest(BaseModel):
     text: Optional[str] = None
-
-from fastapi import Request
 
 @app.post("/api/v1/scan/compliance")
 async def scan_compliance(request: Request):
