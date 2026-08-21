@@ -76,7 +76,7 @@ export default function Layout() {
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  {currentUser?.isDemo ? 'Demo Mode' : 'Verified Auth'}
+                  Verified Auth
                 </span>
               </div>
             </div>

@@ -1,0 +1,413 @@
+﻿================================================================================
+   INTERNSHIP / PROJECT REPORT
+   ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING
+================================================================================
+
+Project Title  : SentryFi - Intelligent Financial Threat and Compliance
+                 Detection Platform
+Organization   : DLithe Consultancy Services Pvt. Ltd.
+Supervisor     : Ms. Dhanlakshmi S Jangalekar
+Intern Name    : [YOUR NAME]
+Registration   : [YOUR REGISTRATION NUMBER]
+Duration       : [START DATE] to [END DATE]
+Report Date    : August 2026
+
+================================================================================
+
+
+================================================================================
+   LETTER OF TRANSMITTAL / EXECUTIVE SUMMARY
+================================================================================
+
+To,
+The Program Co-ordinator,
+DLithe Consultancy Services Pvt. Ltd.
+
+Subject: Submission of Internship Project Report - SentryFi AI/ML Platform
+
+Respected Sir/Madam,
+
+I hereby submit this project report as part of my internship at DLithe
+Consultancy Services Pvt. Ltd. under the supervision of
+Ms. Dhanlakshmi S Jangalekar.
+
+During this internship, I designed and developed SentryFi, an end-to-end
+full-stack AI/ML-powered financial threat detection platform. The project
+integrates three distinct machine learning models with a production-grade
+React/Vite frontend and a Python FastAPI backend. The platform enables
+real-time detection of phishing URLs, invoice anomalies, and regulatory
+compliance violations in financial documents.
+
+Key outcomes of this project:
+  - Designed and trained three ML models (Random Forest, Isolation Forest,
+    Logistic Regression with TF-IDF) for distinct financial security domains.
+  - Built a complete REST API in FastAPI with three inference endpoints,
+    OCR document parsing, and model hot-loading on startup.
+  - Implemented a production-ready React 18 SPA with Firebase Authentication,
+    real-time Firestore audit trails, and graceful cloud fallback mechanisms.
+  - Deployed the frontend via Vercel with the backend accessible via an
+    environment-configured base URL.
+
+This report documents the full technical architecture, machine learning
+methodology, system requirements, and key learnings from the internship.
+
+Yours sincerely,
+[YOUR NAME]
+[REGISTRATION NUMBER]
+DLithe Consultancy Services Pvt. Ltd. Intern
+
+
+================================================================================
+   TABLE OF CONTENTS
+================================================================================
+
+  1. Introduction and Problem Statement
+     1.1 Background: AI in Financial Security
+     1.2 Core Problem Areas Addressed
+     1.3 Objectives of SentryFi
+
+  2. System Architecture Overview
+     2.1 High-Level Architecture (Descriptive)
+     2.2 Technology Stack Summary
+     2.3 Frontend-Backend Communication Design
+
+  3. Actual Codebase Architecture and File Structure
+     3.1 Root Project Structure
+     3.2 Frontend Source Tree (src/)
+     3.3 Backend Source Tree (backend/)
+     3.4 File-by-File Descriptions
+
+  4. Machine Learning Solution Methodology
+     4.1 Phishing URL Classifier
+     4.2 Invoice Anomaly Detector
+     4.3 Compliance Document NLP Classifier
+
+  5. Backend API Design (FastAPI)
+     5.1 API Endpoints
+     5.2 Request/Response Models
+     5.3 Middleware and Startup
+
+  6. Frontend Design and React Architecture
+     6.1 Routing and Pages
+     6.2 Authentication and Protected Routes
+     6.3 Firebase Integration
+     6.4 Service Layer
+
+  7. System, Software, and Hardware Requirements
+     7.1 Hardware Requirements
+     7.2 Backend Python Dependencies (requirements.txt)
+     7.3 Frontend JavaScript Dependencies (package.json)
+
+  8. Results, Key Learnings, and Observations
+     8.1 Model Performance Summary
+     8.2 Key Learnings
+     8.3 Challenges Overcome
+     8.4 Future Roadmap
+
+  9. Conclusion
+
+  10. References
+
+
+================================================================================
+   CHAPTER 1: INTRODUCTION AND PROBLEM STATEMENT
+================================================================================
+
+1.1 Background: AI in Financial Security
+-----------------------------------------
+The global financial system faces escalating threats from cybercriminals,
+fraudulent invoicing, phishing attacks, and regulatory non-compliance.
+According to cybersecurity reports, phishing attacks account for over 36% of
+all data breaches, and invoice fraud alone costs global enterprises billions
+of dollars annually. Anti-Money Laundering (AML) violations and SOX
+(Sarbanes-Oxley Act) compliance failures further expose organizations to
+regulatory sanctions and reputational damage.
+
+Traditional rule-based detection systems are insufficient against the
+increasingly sophisticated and adaptive nature of financial threats. Machine
+Learning offers a paradigm shift by enabling pattern recognition at scale,
+anomaly detection in structured data, and natural language understanding of
+regulatory documents -- all without the need for exhaustive manual rule sets.
+
+1.2 Core Problem Areas Addressed
+----------------------------------
+SentryFi addresses three distinct and critical financial security domains:
+
+  (a) PHISHING URL DETECTION
+      Financial phishing attacks direct victims to spoofed websites mimicking
+      banks, payment platforms (PayPal, Chase, Wells Fargo), and crypto
+      exchanges. Attackers use suspicious TLDs (.xyz, .top, .ru, .tk),
+      obfuscated domains, and embedded financial keywords to build deceptive
+      URLs. A trained classifier can structurally analyze URLs before a user
+      visits them.
+
+  (b) INVOICE FRAUD / ANOMALY DETECTION
+      Invoice tampering involves manipulating line-item totals, applying
+      unauthorized tax rates, or creating fictitious invoices. Statistical
+      anomaly detection using Isolation Forest can identify invoices whose
+      numerical patterns deviate significantly from the normal financial
+      distribution of legitimate documents.
+
+  (c) REGULATORY COMPLIANCE VIOLATIONS
+      Financial documents including contracts, payment memos, and audit
+      reports often contain clauses that violate AML guidelines, SOX controls,
+      or standard payment terms. NLP-based text classification can
+      automatically flag these violations at a clause level for human review.
+
+1.3 Objectives of SentryFi
+----------------------------
+  1. Build and train three domain-specific ML models for financial threat
+     detection.
+  2. Expose the models through a REST API using FastAPI with OCR document
+     processing.
+  3. Create a professional, production-grade React dashboard enabling
+     real-time scanning and audit trail management.
+  4. Integrate Firebase Authentication and Firestore for secure user
+     management and persistent scan history.
+  5. Deploy the system with graceful fallback mechanisms to ensure reliability
+     even when cloud services are unavailable.
+
+
+================================================================================
+   CHAPTER 2: SYSTEM ARCHITECTURE OVERVIEW
+================================================================================
+
+2.1 High-Level Architecture (Descriptive)
+------------------------------------------
+
+  [User Browser]
+       |
+       | HTTPS
+       v
+  [React 18 + Vite SPA - Vercel]
+       |
+       |--- Firebase Auth (Google / Email-Password)
+       |--- Firestore (Scan Audit Trail)
+       |--- Firebase Storage (File Storage - blob fallback active)
+       |
+       | REST API (Axios, 30s timeout, auto-retry on 5xx)
+       v
+  [FastAPI Python Backend - Uvicorn]
+       |
+       |--- /api/v1/scan/phishing  --> [phishing_model.joblib]
+       |--- /api/v1/scan/invoice   --> [invoice_model.joblib] + OCR pipeline
+       |--- /api/v1/scan/compliance --> [compliance_model.joblib]
+       |--- /api/v1/health
+       |
+       v
+  [ML Models (scikit-learn, serialized via joblib)]
+  phishing_model.joblib   (105 KB) - Random Forest Pipeline
+  invoice_model.joblib    (854 KB) - Isolation Forest
+  compliance_model.joblib  (29 KB) - TF-IDF + Logistic Regression Pipeline
+
+2.2 Technology Stack Summary
+------------------------------
+  Layer           | Technology
+  ----------------+--------------------------------------------------
+  Frontend        | React 18, Vite 5, React Router v6, TailwindCSS 3
+  State/Auth      | Firebase 10 (Auth + Firestore + Storage)
+  Charts          | Recharts 2
+  Icons           | Lucide React
+  HTTP Client     | Axios 1.6 (with retry interceptor)
+  Backend         | Python 3, FastAPI, Uvicorn ASGI
+  ML Framework    | scikit-learn, XGBoost, NumPy, Pandas
+  OCR             | pdfplumber, pytesseract, Pillow
+  Model Store     | joblib (.joblib files)
+  Deployment      | Vercel (frontend), env-configured backend URL
+
+2.3 Frontend-Backend Communication Design
+------------------------------------------
+  - The API client (src/services/apiClient.js) creates an Axios instance
+    targeting VITE_API_BASE_URL (environment variable) or falls back to '/api'.
+  - A response interceptor automatically retries requests on HTTP 502/503/504,
+    accommodating ML model cold starts with a 2-second delay before retry.
+  - All scan results are posted to the FastAPI backend via multipart/form-data
+    (file uploads) or JSON (URL scans).
+  - After receiving ML results, the frontend writes a scan record to Firestore
+    via firestoreService.js, with a localStorage fallback if Firestore fails.
+
+
+================================================================================
+   CHAPTER 3: ACTUAL CODEBASE ARCHITECTURE AND FILE STRUCTURE
+================================================================================
+
+3.1 Root Project Structure
+----------------------------
+
+  SentryFi/                        <-- Repository root
+  |-- .env.local                   # Frontend env vars (Firebase keys, API URL)
+  |-- .gitignore                   # Git exclusion patterns
+  |-- cors.json                    # Firebase Storage CORS policy (for gsutil)
+  |-- firestore.rules              # Firestore security rules (user-scoped access)
+  |-- storage.rules                # Firebase Storage rules (auth uid matching)
+  |-- index.html                   # Vite HTML entry point
+  |-- package.json                 # Frontend npm dependencies and scripts
+  |-- vite.config.js               # Vite bundler configuration
+  |-- tailwind.config.js           # TailwindCSS design system config
+  |-- postcss.config.js            # PostCSS processing config
+  |-- vercel.json                  # Vercel SPA routing rewrites
+  |-- dummy.pdf                    # Test invoice PDF for development
+  |-- backend/                     # Python FastAPI backend (see 3.3)
+  |-- src/                         # React frontend source (see 3.2)
+  |-- dist/                        # Production build output (Vite build)
+  |-- node_modules/                # npm packages (not committed)
+
+3.2 Frontend Source Tree (src/)
+---------------------------------
+
+  src/
+  |-- main.jsx
+  |   Entry point. Renders <App /> inside <BrowserRouter> and <AuthProvider>.
+  |
+  |-- App.jsx
+  |   Root component. Defines all client-side routes using React Router v6
+  |   nested routes pattern. Wraps authenticated routes in <ProtectedRoute>.
+  |   Routes: /login, /dashboard, /scanners/phishing, /scanners/invoice,
+  |   /scanners/compliance, /history.
+  |
+  |-- index.css
+  |   Global CSS. Imports Tailwind base, components, utilities layers.
+  |   Defines custom CSS variables and utility classes used across the app.
+  |
+  |-- config/
+  |   |-- firebase.js
+  |       Initializes the Firebase app using VITE_ prefixed environment
+  |       variables. Exports auth (getAuth), db (getFirestore), and storage
+  |       (getStorage) instances for use throughout the app.
+  |
+  |-- context/
+  |   |-- AuthContext.jsx
+  |   |   React Context and Provider for authentication state. Wraps the
+  |   |   application and exposes: currentUser, loading, login(),
+  |   |   loginWithGoogle(), and logout(). Uses onAuthStateChanged listener
+  |   |   to reactively update auth state.
+  |   |
+  |   |-- ProtectedRoute.jsx
+  |       Higher-Order Component. Checks currentUser after auth loading
+  |       completes. Redirects to /login if unauthenticated.
+  |
+  |-- services/
+  |   |-- apiClient.js
+  |   |   Axios instance configured with:
+  |   |   - baseURL: VITE_API_BASE_URL or '/api'
+  |   |   - timeout: 30000ms (for ML inference)
+  |   |   - Response interceptor: auto-retry on 502/503/504 (2s delay)
+  |   |   - Unified human-readable error message formatting
+  |   |
+  |   |-- firestoreService.js
+  |   |   CRUD layer for the 'scans' Firestore collection.
+  |   |   Functions: createScanRecord(), getRecentScans(),
+  |   |   subscribeToUserScans() (real-time), deleteScanRecord().
+  |   |   All functions include localStorage fallback for offline support.
+  |   |   Uses a custom event bus (Set of callbacks) to propagate local
+  |   |   changes to real-time listeners when Firestore is unavailable.
+  |   |
+  |   |-- storageService.js
+  |       File upload service. Currently uses local blob URL as primary
+  |       strategy (URL.createObjectURL) to avoid Firebase Storage CORS
+  |       issues during development. Cloud upload code preserved as comments
+  |       for re-activation post CORS configuration.
+  |
+  |-- components/
+  |   |-- layout/
+  |   |   |-- Layout.jsx
+  |   |       Authenticated shell component. Contains sidebar navigation with
+  |   |       links to all scanner pages, history, and dashboard. Uses
+  |   |       <Outlet /> for rendering child page components.
+  |   |
+  |   |-- common/
+  |       |-- ErrorBoundary.jsx
+  |           React class component error boundary. Catches unhandled render
+  |           errors and displays a graceful fallback UI instead of crashing.
+  |
+  |-- pages/
+      |-- Login.jsx
+      |   Authentication page. Supports email/password login and Google OAuth
+      |   popup sign-in. Shows loading states and error messages.
+      |
+      |-- Dashboard.jsx
+      |   Analytics overview page. Displays aggregate scan statistics (total
+      |   scans, threats detected, risk distribution). Uses Recharts for
+      |   trend visualization. Reads from subscribeToUserScans.
+      |
+      |-- History.jsx
+      |   Complete scan history page. Real-time subscription via
+      |   subscribeToUserScans. Supports filtering by scan type, searching,
+      |   and deleting individual scan records.
+      |
+      |-- Scanners/
+          |-- PhishingScanner.jsx
+          |   URL input form. Posts to /api/v1/scan/phishing via apiClient.
+          |   Displays riskScore, verdict (CLEAN/HIGH_RISK), confidence
+          |   percentage, and flaggedReasons list.
+          |
+          |-- InvoiceScanner.jsx
+          |   File drag-and-drop / browse UI. Uploads to storageService, then
+          |   posts the file to /api/v1/scan/invoice as multipart/form-data.
+          |   Shows animated upload progress bar, OCR extracted fields panel
+          |   (subtotal, tax, line item delta, tax variance), and verdict.
+          |
+          |-- ComplianceScanner.jsx
+              Text area or file upload input. Posts to /api/v1/scan/compliance.
+              Renders flagged clauses in a table with riskTag labels (AML,
+              SOX, TAX_EVASION, etc.) and confidence scores.
+
+3.3 Backend Source Tree (backend/)
+------------------------------------
+
+  backend/
+  |-- main.py
+  |   FastAPI application entry point. Defines all API routes and Pydantic
+  |   request/response models. Adds CORS middleware. Uses lifespan context
+  |   manager to call registry.load_models() at startup.
+  |
+  |-- requirements.txt
+  |   Python package dependency list (18 packages).
+  |
+  |-- .env.example
+  |   Sample environment variable file documenting PORT, ENVIRONMENT,
+  |   and ALLOWED_ORIGINS configuration.
+  |
+  |-- core/
+  |   |-- model_loader.py
+  |       Defines ModelRegistry class with load_models() method. Loads
+  |       phishing_model.joblib, invoice_model.joblib, compliance_model.joblib
+  |       from backend/models/ using joblib. Patches sys.path and __main__
+  |       namespace to resolve URLFeatureExtractor deserialization. Exports
+  |       singleton 'registry' instance.
+  |
+  |-- services/
+  |   |-- ocr_service.py
+  |       process_invoice_file(file_bytes, filename) -> dict
+  |       Handles PDF (pdfplumber), image (pytesseract+Pillow), and TXT input.
+  |       parse_invoice_text(text) -> dict extracts four numerical features:
+  |       tax_to_subtotal_ratio, line_item_sum_delta, round_amount_score,
+  |       amount_z_score via regex pattern matching.
+  |
+  |-- ml/
+  |   |-- train_phishing.py
+  |   |   Defines URLFeatureExtractor (sklearn BaseEstimator + TransformerMixin).
+  |   |   Extracts 8 features from raw URL strings. Trains RandomForestClassifier
+  |   |   inside a Pipeline. Saves phishing_model.joblib.
+  |   |
+  |   |-- train_invoice.py
+  |   |   Generates synthetic invoice feature distribution (10,000 samples).
+  |   |   Trains IsolationForest(n_estimators=100, contamination=0.10).
+  |   |   Saves invoice_model.joblib.
+  |   |
+  |   |-- train_compliance.py
+  |   |   Generates 5,000 synthetic compliance clause samples across 5 classes.
+  |   |   Trains TF-IDF Vectorizer (ngram 1-2, max 5000 features) + Logistic
+  |   |   Regression (balanced weights). Saves compliance_model.joblib.
+  |   |
+  |   |-- train_all.py
+  |       Orchestrator script. Runs all three training scripts in sequence.
+  |
+  |-- models/
+  |   |-- phishing_model.joblib    (105,250 bytes)
+  |   |-- invoice_model.joblib     (873,545 bytes)
+  |   |-- compliance_model.joblib   (29,748 bytes)
+  |
+  |-- tests/
+      Python test suite using pytest and httpx TestClient.
+

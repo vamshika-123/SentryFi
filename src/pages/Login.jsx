@@ -23,7 +23,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, signUp, loginWithGoogle, loginAsDemo } = useAuth();
+  const { login, signUp, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -43,7 +43,7 @@ export default function Login() {
       }
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Authentication failed. Please verify credentials or use Demo Access.');
+      setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -62,10 +62,6 @@ export default function Login() {
     }
   };
 
-  const handleDemoLogin = (role = "Analyst") => {
-    loginAsDemo(role);
-    navigate('/dashboard');
-  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 md:p-8 relative overflow-hidden">
@@ -231,44 +227,6 @@ export default function Login() {
             <span>Continue with Google</span>
           </button>
 
-          {/* Quick Demo Access Mode */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                Instant Demo Access
-              </span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-mono border border-emerald-500/30">
-                1-Click Ready
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("Analyst")}
-                className="p-2.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-primary/50 text-left transition-all group"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Cpu className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-semibold text-slate-200">Security Analyst</span>
-                </div>
-                <p className="text-[10px] text-slate-400 leading-tight">Full scanning & triage permissions</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("Lead")}
-                className="p-2.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-emerald-500/50 text-left transition-all group"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-semibold text-slate-200">Compliance Officer</span>
-                </div>
-                <p className="text-[10px] text-slate-400 leading-tight">Audit trails & policy reports</p>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Security badge footer */}

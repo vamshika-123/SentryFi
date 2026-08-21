@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
     if (!error) return "An unknown error occurred.";
     const code = error.code || "";
     if (code.includes("invalid-api-key") || code.includes("api-key-not-valid")) {
-      return "Firebase API Key is unconfigured or invalid. Use 'Instant Demo Access' below to test the application!";
+      return "Firebase API Key is unconfigured or invalid. Please contact your administrator.";
     }
     if (code.includes("user-not-found") || code.includes("invalid-credential")) {
       return "Invalid email or password. Please verify your credentials or create an account.";
@@ -62,8 +62,7 @@ export function AuthProvider({ children }) {
       const userObj = {
         uid: res.user.uid,
         email: res.user.email,
-        displayName: res.user.displayName || email.split("@")[0],
-        isDemo: false
+        displayName: res.user.displayName || email.split("@")[0]
       };
       setCurrentUser(userObj);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userObj));
@@ -80,8 +79,7 @@ export function AuthProvider({ children }) {
       const userObj = {
         uid: res.user.uid,
         email: res.user.email,
-        displayName: res.user.displayName || email.split("@")[0],
-        isDemo: false
+        displayName: res.user.displayName || email.split("@")[0]
       };
       setCurrentUser(userObj);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userObj));
@@ -100,8 +98,7 @@ export function AuthProvider({ children }) {
         uid: res.user.uid,
         email: res.user.email,
         displayName: res.user.displayName || "Google User",
-        photoURL: res.user.photoURL,
-        isDemo: false
+        photoURL: res.user.photoURL
       };
       setCurrentUser(userObj);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userObj));
@@ -112,23 +109,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function loginAsDemo(role = "Analyst") {
-    const demoUser = {
-      uid: `demo_user_${role.toLowerCase()}`,
-      email: `${role.toLowerCase()}@sentryfi.ai`,
-      displayName: `Demo ${role}`,
-      isDemo: true
-    };
-    setCurrentUser(demoUser);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(demoUser));
-    return demoUser;
-  }
 
   async function logout() {
     try {
       await signOut(auth);
     } catch (e) {
-      // ignore signOut error for demo users
+      console.error("Sign out error", e);
     }
     setCurrentUser(null);
     localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -141,27 +127,13 @@ export function AuthProvider({ children }) {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName || user.email?.split("@")[0],
-          photoURL: user.photoURL,
-          isDemo: false
+          photoURL: user.photoURL
         };
         setCurrentUser(userObj);
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userObj));
       } else {
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed && parsed.isDemo) {
-              setCurrentUser(parsed);
-            } else {
-              setCurrentUser(null);
-            }
-          } catch {
-            setCurrentUser(null);
-          }
-        } else {
-          setCurrentUser(null);
-        }
+        setCurrentUser(null);
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
       }
       setLoading(false);
     });
@@ -174,7 +146,6 @@ export function AuthProvider({ children }) {
     login,
     signUp,
     loginWithGoogle,
-    loginAsDemo,
     logout
   };
 

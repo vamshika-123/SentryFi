@@ -1,4 +1,4 @@
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, deleteObject } from "firebase/storage";
 import { storage } from "../config/firebase";
 
 const ALLOWED_MIME_TYPES = [
@@ -31,52 +31,28 @@ export async function uploadScanDocument(file, userId, folderType, onProgress = 
   const timestamp = Date.now();
   const safeFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
   const filePath = `uploads/${userId}/${folderType}/${timestamp}_${safeFileName}`;
-  
-  try {
-    const storageRef = ref(storage, filePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
 
-    return await new Promise((resolve, reject) => {
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          if (onProgress && snapshot.totalBytes > 0) {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            onProgress(progress);
-          }
-        },
-        (error) => {
-          reject(error);
-        },
-        async () => {
-          try {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve({ downloadURL, filePath });
-          } catch (error) {
-            reject(error);
-          }
-        }
-      );
-    });
-  } catch (error) {
-    console.warn("Cloud storage upload bypassed (using local blob URL fallback):", error?.message);
-    
-    // Simulate upload progress
-    if (onProgress) {
-      onProgress(30);
-      await new Promise(r => setTimeout(r, 150));
-      onProgress(75);
-      await new Promise(r => setTimeout(r, 150));
-      onProgress(100);
-    }
+  // NOTE: Firebase Storage CORS is not yet configured on this bucket.
+  // Using local blob URL fallback (no network request made, no CORS errors).
+  // To enable real cloud uploads later, run:
+  //   gsutil cors set cors.json gs://invoice-fraud-detection-84638.firebasestorage.app
+  // Then replace this block with the cloud upload logic (see git history).
 
-    const localUrl = URL.createObjectURL(file);
-    return { downloadURL: localUrl, filePath };
+  if (onProgress) {
+    onProgress(25);
+    await new Promise(r => setTimeout(r, 100));
+    onProgress(60);
+    await new Promise(r => setTimeout(r, 120));
+    onProgress(100);
   }
+
+  const localUrl = URL.createObjectURL(file);
+  return { downloadURL: localUrl, filePath };
 }
 
 /**
- * Deletes a file from Cloud Storage given its path
+ * Deletes a file from Cloud Storage given its path.
+ * No-op in local fallback mode.
  */
 export async function deleteStorageFile(filePath) {
   try {
