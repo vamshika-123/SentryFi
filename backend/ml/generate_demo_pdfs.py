@@ -38,16 +38,22 @@ def create_invoice_fraud_tampered_inr(filepath):
 def create_compliance_clean(filepath):
     c = canvas.Canvas(filepath)
     
-    text = (
-        "All terms standard as per company policy and Companies Act 2013. "
-        "Tax forms filed and completed according to income tax rules."
-    )
+    lines = [
+        "ANNUAL COMPLIANCE CERTIFICATE",
+        "",
+        "All terms comply with Companies Act 2013 and applicable MCA guidelines.",
+        "Invoice for professional services; 18% GST applied as per GST Act.",
+        "Employee provident fund contributions deposited by due date as per EPF Act.",
+        "Board resolution passed for capital expenditure with full approval.",
+        "Quarterly audit completed by ICAI-empanelled firm; no discrepancy noted.",
+        "Vendor due diligence completed; GSTIN, PAN, and bank account verified.",
+        "Dividend declared in compliance with Companies Act Section 123.",
+    ]
     
-    # Split text for basic wrapping
-    y = 690
-    for i in range(0, len(text), 70):
-        c.drawString(100, y, text[i:i+70])
-        y -= 20
+    y = 720
+    for line in lines:
+        c.drawString(100, y, line)
+        y -= 22
         
     c.save()
 

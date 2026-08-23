@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -7,6 +8,9 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 from backend.core.model_loader import registry
 from backend.services.ocr_service import process_invoice_file
@@ -92,8 +96,19 @@ async def scan_invoice(file: UploadFile = File(...)):
     # Process OCR and extract features
     features_dict = process_invoice_file(content, file.filename)
     
-    # Prepare dataframe for prediction
-    df = pd.DataFrame([features_dict])
+    # Bug 4 fix: if OCR completely failed, do not run model on fabricated zeros
+    if features_dict.get("extraction_failed"):
+        return {
+            "extractedFields": features_dict,
+            "riskScore": 50.0,
+            "verdict": "NEEDS_MANUAL_REVIEW",
+            "flaggedExplanations": ["Automated text extraction failed — document could not be parsed. Please review manually."]
+        }
+    
+    # Bug 9c: Build DataFrame from ONLY the 5 model feature columns.
+    # Display-only keys (tax_amount, line_item_delta, tax_percentage_variance) must not reach the model.
+    MODEL_FEATURE_KEYS = ['subtotal', 'gst_rate_deviation', 'item_sum_delta', 'round_number_bias', 'tds_deduction_mismatch']
+    df = pd.DataFrame([{k: features_dict[k] for k in MODEL_FEATURE_KEYS}])
     
     # Predict
     try:
@@ -103,10 +118,17 @@ async def scan_invoice(file: UploadFile = File(...)):
         
     is_anomaly = pred == -1
     
-    # Rule-based override for perfectly clean invoices
-    if (features_dict.get("gst_rate_deviation", 0) < 0.01 and 
-        features_dict.get("item_sum_delta", 0) < 1.0 and 
-        features_dict.get("round_number_bias", 0) == 0):
+    # Bug 5 fix: Rule-based override is kept but now LOGS whenever it flips the model's decision.
+    # With bugs 2-4 fixed, real features are non-zero so this fires much less often.
+    if (features_dict.get("gst_rate_deviation", 1) < 0.01 and 
+        features_dict.get("item_sum_delta", 1) < 1.0 and 
+        features_dict.get("round_number_bias", 1) == 0 and
+        features_dict.get("tds_deduction_mismatch", 1) < 1.0):
+        if is_anomaly:
+            logger.warning(
+                f"Rule override changed prediction from SUSPICIOUS to CLEAN for "
+                f"'{file.filename}' with features: {features_dict}"
+            )
         is_anomaly = False
     
     verdict = "SUSPICIOUS" if is_anomaly else "CLEAN"
@@ -117,7 +139,9 @@ async def scan_invoice(file: UploadFile = File(...)):
         if features_dict.get("item_sum_delta", 0) > 0:
             explanations.append("Line items do not sum to total")
         if features_dict.get("gst_rate_deviation", 0) > 0.05:
-            explanations.append("Unusual GST rate variance (expected standard slabs)")
+            explanations.append("Unusual GST rate variance (expected standard GST slabs: 5%, 12%, 18%, 28%)")
+        if features_dict.get("tds_deduction_mismatch", 0) > 100:
+            explanations.append("TDS deduction amount significantly differs from expected")
             
     return {
         "extractedFields": features_dict,
@@ -176,28 +200,37 @@ async def scan_compliance(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
         
     flagged_clauses = []
+    low_confidence_flags = []  # Bug 10: below-threshold predictions, visible but not counted
     overall_risk = 0.0
+    CONFIDENCE_THRESHOLD = 65.0  # Bug 10: minimum confidence to treat a clause as a real violation
     
     for i, clause in enumerate(clauses):
         pred_class = preds[i]
         confidence = float(max(probs[i])) * 100
         
         if pred_class != "CLEAN":
-            flagged_clauses.append({
-                "clause": clause,
-                "riskTag": pred_class,
-                "confidence": round(confidence, 2)
-            })
-            overall_risk = max(overall_risk, confidence)
+            if confidence >= CONFIDENCE_THRESHOLD:
+                flagged_clauses.append({
+                    "clause": clause,
+                    "riskTag": pred_class,
+                    "confidence": round(confidence, 2)
+                })
+                overall_risk = max(overall_risk, confidence)
+            else:
+                # Low-confidence prediction — surface separately, don't affect verdict/score
+                low_confidence_flags.append({
+                    "clause": clause,
+                    "riskTag": pred_class,
+                    "confidence": round(confidence, 2)
+                })
             
     verdict = "FLAGGED" if flagged_clauses else "CLEAN"
     
     return {
         "documentRiskScore": round(overall_risk, 2) if flagged_clauses else 5.0,
         "verdict": verdict,
-        "flaggedClauses": flagged_clauses
+        "flaggedClauses": flagged_clauses,
+        "lowConfidenceFlags": low_confidence_flags
     }
 
-# Trigger reload
-
-# Trigger reload 2
+# End of SentryFi API — Bugs 8/9/10 applied

@@ -39,9 +39,9 @@ if __name__ == "__main__":
     print("Training Invoice Anomaly Model (INR Context)...")
     X_train = generate_synthetic_invoice_data(10000)
     
-    # We use IsolationForest for unsupervised anomaly detection.
-    # The contamination=0.10 calibrates the decision threshold (top 10% most anomalous).
-    model = IsolationForest(n_estimators=100, contamination=0.10, random_state=42)
+    # IMPORTANT: contamination must equal n_anomaly/n_samples (currently 5%/0.05).
+    # If you change the anomaly ratio in generate_synthetic_invoice_data(), update this value too.
+    model = IsolationForest(n_estimators=100, contamination=0.05, random_state=42)
     model.fit(X_train)
     
     model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../models', 'invoice_model.joblib'))
