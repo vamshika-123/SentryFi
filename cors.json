@@ -3,8 +3,7 @@
     "origin": [
       "http://localhost:5173",
       "http://localhost:3000",
-      "https://invoice-fraud-detection-84638.web.app",
-      "https://invoice-fraud-detection-84638.firebaseapp.com"
+      "https://sentry-fi.vercel.app/"
     ],
     "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
     "responseHeader": [
