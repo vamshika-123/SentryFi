@@ -3,7 +3,7 @@
     "origin": [
       "http://localhost:5173",
       "http://localhost:3000",
-      "https://sentry-fi.vercel.app/"
+      "https://sentry-fi.vercel.app"
     ],
     "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
     "responseHeader": [
