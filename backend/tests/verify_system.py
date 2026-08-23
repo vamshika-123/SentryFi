@@ -1,8 +1,8 @@
 import os
 import sys
 
-# Ensure backend can be imported
-sys.path.append(os.path.dirname(__file__))
+# Ensure backend can be imported from project root
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from fastapi.testclient import TestClient
 from backend.main import app

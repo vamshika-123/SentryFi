@@ -53,7 +53,7 @@ if __name__ == "__main__":
     print(f"Anomalous Synthetic-> Verdict: {res_anom['verdict']}, Risk Score: {res_anom['riskScore']}/100 (decision: {res_anom['decision_function']})")
 
     print('\n================ TEST 2: DEMO PDF INVOICES ================')
-    demo_dir = 'demo_samples'
+    demo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../demo_samples'))
     for f in sorted(os.listdir(demo_dir)):
         if 'invoice' in f and f.endswith('.pdf'):
             path = os.path.join(demo_dir, f)

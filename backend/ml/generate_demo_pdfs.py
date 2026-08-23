@@ -1,7 +1,7 @@
 import os
 from reportlab.pdfgen import canvas
 
-DEMO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../demo_samples'))
+DEMO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../demo_samples'))
 os.makedirs(DEMO_DIR, exist_ok=True)
 
 def create_invoice_clean_inr(filepath):

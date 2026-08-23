@@ -41,7 +41,7 @@ def test_invoice_scan():
 def test_compliance_scan_text():
     with TestClient(app) as client:
         payload = {
-            "text": "The payment was routed to an unverified offshore account without tax clearance."
+            "text": "Payment routed to unverified offshore shell entity without RBI approval."
         }
         response = client.post("/api/v1/scan/compliance", json=payload)
         assert response.status_code == 200

@@ -1,7 +1,14 @@
+import os
 import io
 import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 from fastapi.testclient import TestClient
 from backend.main import app
+
+def test_integration():
+    """Pytest entrypoint for full API integration test suite."""
+    run_integration_tests()
 
 def print_row(endpoint, payload_preview, verdict, status):
     print(f"{endpoint:<30} | {payload_preview[:43]:<45} | {str(verdict):<30} | {status:<10}")
@@ -60,11 +67,11 @@ def run_integration_tests():
             
             # 4. Compliance Scanner Test
             # Case A: Violation Text
-            violation_text = "All vendor commissions exceeding $50,000 shall be routed through undisclosed offshore accounts without standard AML clearance."
+            violation_text = "Payment routed to unverified offshore shell entity without RBI approval."
             resp = client.post("/api/v1/scan/compliance", json={"text": violation_text})
             data = resp.json()
-            # Check if any flagged clause is AML_RED_FLAG
-            is_aml = any(c.get("riskTag") == "AML_RED_FLAG" for c in data.get("flaggedClauses", []))
+            # Check if any flagged clause is AML_PMLA_VIOLATION
+            is_aml = any(c.get("riskTag") == "AML_PMLA_VIOLATION" for c in data.get("flaggedClauses", []))
             passed = (resp.status_code == 200 and 
                       data.get("verdict") in ["FLAGGED", "SUSPICIOUS"] and 
                       is_aml)
@@ -103,10 +110,9 @@ def run_integration_tests():
     
     if all_passed:
         print("\n[SUCCESS] All Integration Tests Passed Successfully!")
-        sys.exit(0)
     else:
         print("\n[FAILED] Some Integration Tests Failed.")
-        sys.exit(1)
+    assert all_passed, "Integration test suite had one or more failing checks."
 
 if __name__ == "__main__":
     run_integration_tests()

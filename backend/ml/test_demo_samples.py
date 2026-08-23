@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 
 from backend.main import app
 
-DEMO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../demo_samples'))
+DEMO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../demo_samples'))
 
 def test_invoice(client, filename, expected_verdict_contains):
     filepath = os.path.join(DEMO_DIR, filename)
