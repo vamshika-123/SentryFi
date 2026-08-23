@@ -47,4 +47,28 @@ if __name__ == "__main__":
     model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../models', 'invoice_model.joblib'))
     joblib.dump(model, model_path)
     print(f"Saved invoice anomaly model to {model_path}")
+    
+    # BUG 19: Compute score calibration bounds across training distribution
+    dec_scores = model.decision_function(X_train)
+    risk_raw = -dec_scores  # Invert so higher = more anomalous
+    
+    score_min = float(np.min(risk_raw))
+    score_max = float(np.max(risk_raw))
+    
+    normal_dec = dec_scores[dec_scores >= 0]
+    anom_dec = dec_scores[dec_scores < 0]
+    normal_max = float(np.percentile(normal_dec, 99)) if len(normal_dec) > 0 else 0.25
+    anom_max = float(np.percentile(np.abs(anom_dec), 99)) if len(anom_dec) > 0 else 0.20
+    
+    import json
+    range_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../models', 'invoice_score_range.json'))
+    range_data = {
+        "score_min": score_min,
+        "score_max": score_max,
+        "normal_max": normal_max,
+        "anom_max": anom_max
+    }
+    with open(range_path, 'w') as f:
+        json.dump(range_data, f, indent=2)
+    print(f"Saved invoice score range to {range_path}: {range_data}")
 

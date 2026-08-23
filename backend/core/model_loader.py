@@ -17,6 +17,7 @@ class ModelRegistry:
     def __init__(self):
         self.phishing_model = None
         self.invoice_model = None
+        self.invoice_score_range = {"score_min": -0.25, "score_max": 0.15}
         self.compliance_model = None
         
     def load_models(self):
@@ -24,6 +25,7 @@ class ModelRegistry:
         
         phishing_path = os.path.join(models_dir, 'phishing_model.joblib')
         invoice_path = os.path.join(models_dir, 'invoice_model.joblib')
+        invoice_range_path = os.path.join(models_dir, 'invoice_score_range.json')
         compliance_path = os.path.join(models_dir, 'compliance_model.joblib')
         
         if os.path.exists(phishing_path):
@@ -33,6 +35,12 @@ class ModelRegistry:
         if os.path.exists(invoice_path):
             self.invoice_model = joblib.load(invoice_path)
             print("Loaded invoice model.")
+            
+        if os.path.exists(invoice_range_path):
+            import json
+            with open(invoice_range_path, 'r') as f:
+                self.invoice_score_range = json.load(f)
+            print(f"Loaded invoice score range: {self.invoice_score_range}")
             
         if os.path.exists(compliance_path):
             self.compliance_model = joblib.load(compliance_path)

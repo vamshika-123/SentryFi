@@ -12,7 +12,7 @@ import {
 import clsx from 'clsx';
 
 export default function Layout() {
-  const { logout, currentUser } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -63,18 +63,8 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* User footer */}
+        {/* Sidebar footer — logout only */}
         <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 px-3 py-2 mb-1 rounded-lg bg-surface-alt">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-              {currentUser?.displayName?.charAt(0) || currentUser?.email?.charAt(0).toUpperCase() || 'U'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-text-primary truncate">
-                {currentUser?.displayName || currentUser?.email}
-              </p>
-            </div>
-          </div>
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2 w-full text-left text-text-secondary text-sm hover:text-danger hover:bg-red-50 rounded-lg transition-colors"

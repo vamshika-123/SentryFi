@@ -87,16 +87,25 @@ async def scan_phishing(request: PhishingRequest):
     )
 
 @app.post("/api/v1/scan/invoice")
-async def scan_invoice(file: UploadFile = File(...)):
+async def scan_invoice(
+    file: UploadFile = File(...),
+    currency_override: Optional[str] = Form(default=None),
+):
     if not registry.invoice_model:
         raise HTTPException(status_code=503, detail="Invoice model not loaded")
-        
+
     content = await file.read()
-    
-    # Process OCR and extract features
-    features_dict = process_invoice_file(content, file.filename)
-    
-    # Bug 4 fix: if OCR completely failed, do not run model on fabricated zeros
+
+    # Process OCR, extract features, and apply currency hint in one pass.
+    # currency_override (when supplied) overrides auto-detection AND re-runs
+    # the GST/generic-tax framing logic (BUG 12c + BUG 14).
+    features_dict = process_invoice_file(
+        content, file.filename,
+        currency_hint=currency_override or None
+    )
+
+    # BUG 4 / BUG 11: if OCR completely failed (no amounts found at all), return manual review.
+    # Partial success (tax_not_stated but subtotal extracted) is NOT a failure — let the model run.
     if features_dict.get("extraction_failed"):
         return {
             "extractedFields": features_dict,
@@ -104,24 +113,36 @@ async def scan_invoice(file: UploadFile = File(...)):
             "verdict": "NEEDS_MANUAL_REVIEW",
             "flaggedExplanations": ["Automated text extraction failed — document could not be parsed. Please review manually."]
         }
-    
-    # Bug 9c: Build DataFrame from ONLY the 5 model feature columns.
-    # Display-only keys (tax_amount, line_item_delta, tax_percentage_variance) must not reach the model.
+
     MODEL_FEATURE_KEYS = ['subtotal', 'gst_rate_deviation', 'item_sum_delta', 'round_number_bias', 'tds_deduction_mismatch']
     df = pd.DataFrame([{k: features_dict[k] for k in MODEL_FEATURE_KEYS}])
-    
-    # Predict
+
+    # Predict (binary label and calibrated risk score)
     try:
         pred = registry.invoice_model.predict(df)[0]
+        # BUG 19: IsolationForest decision_function returns positive for inliers/normal
+        # and negative for outliers/anomalies (threshold = 0.0).
+        raw_dec = float(registry.invoice_model.decision_function(df)[0])
+        
+        normal_max = registry.invoice_score_range.get("normal_max", 0.25)
+        anom_max = registry.invoice_score_range.get("anom_max", 0.17)
+        
+        if raw_dec >= 0:
+            # Inlier/Normal: map [0, normal_max] -> [50, 0] (clean invoices score < 50)
+            ratio = min(1.0, raw_dec / max(1e-5, normal_max))
+            risk_score = round(max(0.0, 50.0 * (1.0 - ratio)), 1)
+        else:
+            # Outlier/Anomaly: map [0, -anom_max] -> [50, 100] (anomalous invoices score > 50)
+            ratio = min(1.0, abs(raw_dec) / max(1e-5, anom_max))
+            risk_score = round(min(100.0, 50.0 + 50.0 * ratio), 1)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-        
+
     is_anomaly = pred == -1
-    
-    # Bug 5 fix: Rule-based override is kept but now LOGS whenever it flips the model's decision.
-    # With bugs 2-4 fixed, real features are non-zero so this fires much less often.
-    if (features_dict.get("gst_rate_deviation", 1) < 0.01 and 
-        features_dict.get("item_sum_delta", 1) < 1.0 and 
+
+    # Rule-based override: if all anomaly signals are near-zero, trust clean verdict.
+    if (features_dict.get("gst_rate_deviation", 1) < 0.01 and
+        features_dict.get("item_sum_delta", 1) < 1.0 and
         features_dict.get("round_number_bias", 1) == 0 and
         features_dict.get("tds_deduction_mismatch", 1) < 1.0):
         if is_anomaly:
@@ -130,19 +151,32 @@ async def scan_invoice(file: UploadFile = File(...)):
                 f"'{file.filename}' with features: {features_dict}"
             )
         is_anomaly = False
-    
+        # Ensure clean rule-overridden invoices reflect a safe low risk score
+        risk_score = min(risk_score, 25.0)
+
     verdict = "SUSPICIOUS" if is_anomaly else "CLEAN"
-    risk_score = 90.0 if is_anomaly else 10.0
-    
+
     explanations = []
+
+    # BUG 11: warn when tax section wasn't found (not an anomaly, just informational)
+    if features_dict.get("tax_not_stated"):
+        explanations.append("No tax/GST breakdown found on this invoice — subtotal computed from line items.")
+
     if is_anomaly:
         if features_dict.get("item_sum_delta", 0) > 0:
-            explanations.append("Line items do not sum to total")
-        if features_dict.get("gst_rate_deviation", 0) > 0.05:
-            explanations.append("Unusual GST rate variance (expected standard GST slabs: 5%, 12%, 18%, 28%)")
+            # BUG 13: only flag as mismatch when there are no legitimate additional charges accounting for the gap
+            if features_dict.get("additional_charges_label"):
+                explanations.append(
+                    f"Amount difference accounted for by: {features_dict['additional_charges_label']}"
+                )
+            else:
+                explanations.append("Line items do not sum to stated total — possible discrepancy.")
+        # BUG 14: only surface GST deviation for invoices that are explicitly GST-labelled
+        if features_dict.get("is_gst_invoice") and features_dict.get("gst_rate_deviation", 0) > 0.05:
+            explanations.append("Unusual GST rate variance (expected standard slabs: 5%, 12%, 18%, 28%)")
         if features_dict.get("tds_deduction_mismatch", 0) > 100:
             explanations.append("TDS deduction amount significantly differs from expected")
-            
+
     return {
         "extractedFields": features_dict,
         "riskScore": risk_score,
