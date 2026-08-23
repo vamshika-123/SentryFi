@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { uploadScanDocument } from '../../services/storageService';
 import { createScanRecord } from '../../services/firestoreService';
 import apiClient from '../../services/apiClient';
 import { FileText, Loader2, UploadCloud, CheckCircle, ShieldAlert, FileSearch } from 'lucide-react';
@@ -40,11 +39,6 @@ export default function ComplianceScanner() {
         payload = { text: textInput };
         config.headers['Content-Type'] = 'application/json';
       } else {
-        setStatusMsg('Uploading document securely...');
-        const uploadRes = await uploadScanDocument(file, currentUser.uid, 'compliance');
-        downloadURL = uploadRes.downloadURL;
-        filePath = uploadRes.filePath;
-        
         setStatusMsg('Running NLP extraction...');
         payload = new FormData();
         payload.append('file', file);

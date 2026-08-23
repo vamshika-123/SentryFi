@@ -411,3 +411,701 @@ SentryFi addresses three distinct and critical financial security domains:
   |-- tests/
       Python test suite using pytest and httpx TestClient.
 
+
+================================================================================
+   CHAPTER 4: MACHINE LEARNING SOLUTION METHODOLOGY
+================================================================================
+
+4.1 Phishing URL Classifier
+-----------------------------
+File    : backend/ml/train_phishing.py
+Model   : Random Forest Classifier (inside sklearn Pipeline)
+Artifact: backend/models/phishing_model.joblib (105 KB)
+
+FEATURE ENGINEERING - URLFeatureExtractor:
+  A custom scikit-learn transformer (BaseEstimator, TransformerMixin) converts
+  each raw URL string into an 8-dimensional numerical feature vector.
+
+  Feature 1 - url_length:
+    Total character count of the URL string. Phishing URLs are typically longer
+    to obscure the true domain with subdomains and path segments.
+
+  Feature 2 - dot_count:
+    Number of '.' characters. Multiple subdomains are a classic indicator:
+    e.g., secure.paypal.login.xyz.top has 4 dots.
+
+  Feature 3 - hyphen_count:
+    Number of '-' characters. Legitimate domain names rarely use multiple
+    hyphens, while phishing domains use them to mimic real brands.
+
+  Feature 4 - at_count:
+    Presence of '@' in the URL. Browsers treat text before '@' as credentials
+    and navigate to the host after '@', making 'user@malicious.com' dangerous.
+
+  Feature 5 - has_ip:
+    Binary flag. Regex pattern \b(?:\d{1,3}\.){3}\d{1,3}\b detects raw IPv4
+    addresses used instead of domain names (e.g., http://54.123.43.122/login).
+
+  Feature 6 - has_suspicious_tld:
+    Binary flag. tldextract library parses the TLD accurately. Checks against
+    curated high-risk TLD list: [xyz, top, ru, tk, cc, info, biz].
+
+  Feature 7 - entropy (Shannon Entropy):
+    Measures information randomness of the URL. Formula:
+      H(X) = -sum(p(x) * log2(p(x))) for all unique characters x.
+    High entropy indicates randomly generated or encoded subdomains.
+
+  Feature 8 - keyword_count:
+    Count of financial/authentication keywords in the URL from the list:
+    [login, secure, bank, verify, kyc, wallet, paypal, crypto].
+
+ALGORITHM - RandomForestClassifier:
+  - 100 decision trees (n_estimators=100)
+  - Maximum tree depth of 10 to prevent overfitting
+  - Binary output: 0 = Legitimate, 1 = Phishing
+  - predict_proba() provides per-class probability scores
+
+TRAINING DATA:
+  - Primary: Attempts real phishing dataset download from GitHub
+  - Fallback: 10,000 synthetic URLs (5,000 legitimate + 5,000 phishing)
+    * Legitimate: Randomly prefixed well-known domains (google, chase, paypal,
+      amazon, netflix, github, bankofamerica, citi, linkedin, twitter)
+    * Phishing: Templates with suspicious TLDs (.xyz, .top, .ru, .tk, .cc)
+      and embedded keywords (paypal-security-update, kyc-update, wallet-verify)
+
+TRAINING PIPELINE:
+  Pipeline([
+    ('features', URLFeatureExtractor()),
+    ('classifier', RandomForestClassifier(n_estimators=100, random_state=42,
+                                           max_depth=10))
+  ])
+  80/20 train/test split, random_state=42
+
+INFERENCE FLOW (/api/v1/scan/phishing):
+  Input  -> { "url": "http://paypal-secure.xyz/login" }
+  Step 1 -> URLFeatureExtractor transforms URL to 8-feature vector
+  Step 2 -> RandomForest predicts class and probabilities
+  Step 3 -> risk_score = confidence*100 (phishing) or (1-conf)*100 (clean)
+  Step 4 -> Heuristic flaggedReasons generated from URL content
+  Output -> { riskScore, verdict, confidence, flaggedReasons, scannedAt }
+
+-------------------------------------------------------------------
+
+4.2 Invoice Anomaly Detector
+------------------------------
+File    : backend/ml/train_invoice.py + backend/services/ocr_service.py
+Model   : IsolationForest (unsupervised anomaly detection)
+Artifact: backend/models/invoice_model.joblib (854 KB)
+
+OCR PIPELINE (ocr_service.py - process_invoice_file):
+  Accepts raw file bytes and filename; returns feature dict.
+
+  PDF  -> pdfplumber.open(BytesIO(bytes)) iterates pages -> extract_text()
+  JPG/PNG -> pytesseract.image_to_string(Image.open(BytesIO(bytes)))
+  TXT  -> file_bytes.decode('utf-8', errors='ignore')
+  Fallback -> default text "Subtotal: $1000.00 Tax: $100.00 Total: $1100.00"
+
+REGEX FEATURE EXTRACTION (parse_invoice_text):
+  Pattern for subtotal: r'(?:subtotal|sub-total)[\s:]+\$?([\d,]+\.\d{2})'
+  Pattern for tax     : r'(?:tax|vat)[\s:]+\$?([\d,]+\.\d{2})'
+  Pattern for total   : r'(?:total|amount due)[\s:]+\$?([\d,]+\.\d{2})'
+
+  Feature 1 - tax_to_subtotal_ratio = tax_amount / subtotal
+    Normal invoices: approximately 0.08 to 0.12 (8-12% tax rate)
+    Anomalous: below 0.02 or above 0.20
+
+  Feature 2 - line_item_sum_delta = |total - (subtotal + tax_amount)|
+    Normal: near 0 (rounding errors < $1)
+    Anomalous: significant discrepancy ($10 to $5,000)
+
+  Feature 3 - round_amount_score = 1 if subtotal % 100 == 0 else 0
+    Fraudsters commonly use exact round amounts to fabricate invoices.
+
+  Feature 4 - amount_z_score = (subtotal - 500) / 300
+    Proxy for how unusual the subtotal amount is relative to baseline.
+    Extreme values (>3 or <-2) indicate potential fraud.
+
+TRAINING DATA GENERATION:
+  Normal samples (95% - 9,500 rows):
+    tax_to_subtotal_ratio ~ Normal(mean=0.10, std=0.02)
+    line_item_sum_delta   ~ Exponential(scale=1.0)
+    round_amount_score    ~ Binomial(n=1, p=0.05)
+    amount_z_score        ~ Normal(mean=0, std=1)
+
+  Anomalous samples (5% - 500 rows):
+    tax_to_subtotal_ratio ~ Uniform(0.0, 0.4)
+    line_item_sum_delta   ~ Uniform(10, 5000)
+    round_amount_score    ~ Binomial(n=1, p=0.7)
+    amount_z_score        ~ Uniform(3, 15)
+
+ALGORITHM - IsolationForest:
+  - Unsupervised: no labeled anomaly data required
+  - 100 isolation trees (n_estimators=100)
+  - contamination=0.10: top 10% anomalous samples define decision boundary
+  - predict() returns +1 (normal) or -1 (anomaly)
+  - Path length in random trees is shorter for anomalies (easier to isolate)
+
+INFERENCE FLOW (/api/v1/scan/invoice):
+  Input  -> multipart file upload (PDF, PNG, JPG, TXT)
+  Step 1 -> process_invoice_file() -> OCR -> feature dict
+  Step 2 -> pd.DataFrame([features_dict])
+  Step 3 -> registry.invoice_model.predict(df)[0] -> +1 or -1
+  Step 4 -> verdict = "SUSPICIOUS" if pred==-1 else "CLEAN"
+  Step 5 -> explanations generated from feature thresholds
+  Output -> { extractedFields, riskScore, verdict, flaggedExplanations }
+
+-------------------------------------------------------------------
+
+4.3 Compliance Document NLP Classifier
+----------------------------------------
+File    : backend/ml/train_compliance.py
+Model   : Pipeline [ TF-IDF Vectorizer + Logistic Regression ]
+Artifact: backend/models/compliance_model.joblib (29 KB)
+
+CLASSIFICATION CATEGORIES:
+  CLEAN                      - Standard, compliant financial clause
+  AML_RED_FLAG               - Anti-Money Laundering violation
+                               (offshore transfers, shell companies,
+                               smurfing / structuring below threshold)
+  SOX_VIOLATION              - Sarbanes-Oxley violation
+                               (unauthorized statement edits, disabled audit
+                               logs, lack of segregation of duties)
+  TAX_EVASION_SUSPICION      - Off-the-books transactions, disguised fees,
+                               backdated contracts, unreported income
+  UNAUTHORIZED_PAYMENT_TERMS - Overridden payment terms, unsigned contracts,
+                               duplicate payments, post-signature alterations
+
+TEXT VECTORIZATION - TF-IDF:
+  TfidfVectorizer(ngram_range=(1, 2), max_features=5000)
+  - Converts text clauses into a sparse TF-IDF feature matrix
+  - Unigrams + Bigrams: captures contextual phrases like "offshore account",
+    "audit logs disabled", "net 90 terms overridden"
+  - IDF weighting: down-weights common words, emphasizes rare indicator terms
+  - max_features=5000: keeps the feature space manageable
+
+ALGORITHM - Logistic Regression:
+  - class_weight='balanced': compensates for class imbalance
+  - max_iter=1000: ensures convergence on high-dimensional TF-IDF space
+  - Multi-class via one-vs-rest (OvR) strategy
+  - predict_proba() provides per-class confidence scores
+
+TRAINING DATA:
+  5,000 synthetic labeled samples across 5 categories (1,000 each).
+  Templates per category:
+  - CLEAN: 7 templates (standard invoices, travel expenses, salary deposits)
+  - AML_RED_FLAG: 5 templates (offshore transfers, shell companies, smurfing)
+  - SOX_VIOLATION: 5 templates (unauthorized edits, disabled audit logs)
+  - TAX_EVASION_SUSPICION: 5 templates (cash payments, backdated contracts)
+  - UNAUTHORIZED_PAYMENT_TERMS: 5 templates (overridden terms, duplicates)
+  Random year annotations added to 50% of samples for lexical diversity.
+
+INFERENCE FLOW (/api/v1/scan/compliance):
+  Input  -> JSON { "text": "..." } OR multipart PDF/TXT file
+  Step 1 -> Parse content-type header to branch JSON vs multipart handling
+  Step 2 -> PDF: pdfplumber inline extraction; TXT: raw decode
+  Step 3 -> Split into clauses: re.split(r'\n|\.', text)
+             Filter clauses with len > 10 characters
+  Step 4 -> registry.compliance_model.predict(clauses) -> class labels
+            registry.compliance_model.predict_proba(clauses) -> scores
+  Step 5 -> Collect non-CLEAN clauses with confidence and riskTag
+            overall_risk = max confidence across all flagged clauses
+  Output -> { documentRiskScore, verdict, flaggedClauses[] }
+
+
+================================================================================
+   CHAPTER 5: BACKEND API DESIGN (FastAPI)
+================================================================================
+
+5.1 API Endpoints
+------------------
+
+  Method | Route                     | Description
+  -------+---------------------------+-------------------------------------------
+  GET    | /api/v1/health            | Health check. Returns {"status": "ok"} and
+         |                           | UTC ISO timestamp. Used for uptime monitors.
+  POST   | /api/v1/scan/phishing     | URL phishing scan. JSON body with "url"
+         |                           | field. Returns PhishingResponse model.
+  POST   | /api/v1/scan/invoice      | Invoice anomaly scan. Accepts multipart
+         |                           | UploadFile (PDF, PNG, JPG, TXT). Returns
+         |                           | OCR features and anomaly verdict.
+  POST   | /api/v1/scan/compliance   | Compliance analysis. Accepts JSON text or
+         |                           | multipart file. Returns flagged clauses.
+
+5.2 Request/Response Models (Pydantic)
+----------------------------------------
+
+  PhishingRequest:
+    url: str
+
+  PhishingResponse:
+    url: str
+    riskScore: float          (0.0 to 100.0)
+    verdict: str              ("CLEAN" or "HIGH_RISK")
+    confidence: float         (0.0 to 1.0, raw ML probability)
+    flaggedReasons: List[str] (heuristic explanation strings)
+    scannedAt: str            (ISO 8601 UTC timestamp)
+
+  InvoiceResponse (untyped dict):
+    extractedFields: dict
+      tax_to_subtotal_ratio: float
+      line_item_sum_delta: float
+      round_amount_score: int
+      amount_z_score: float
+    riskScore: float          (10.0 for CLEAN, 90.0 for SUSPICIOUS)
+    verdict: str              ("CLEAN" or "SUSPICIOUS")
+    flaggedExplanations: List[str]
+
+  ComplianceResponse (untyped dict):
+    documentRiskScore: float  (max confidence of flagged clauses, or 5.0)
+    verdict: str              ("CLEAN" or "FLAGGED")
+    flaggedClauses: List[dict]
+      clause: str
+      riskTag: str            (AML_RED_FLAG | SOX_VIOLATION | etc.)
+      confidence: float       (0.0 to 100.0)
+
+5.3 Middleware and Startup
+---------------------------
+  CORS Middleware (fastapi.middleware.cors.CORSMiddleware):
+    allow_origins: ["http://localhost:3000", "*.vercel.app"]
+    allow_credentials: True
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+
+  Lifespan Context Manager (@asynccontextmanager):
+    On startup: calls registry.load_models() to load all three .joblib files.
+    Models are held in memory for the lifetime of the server process.
+
+  Error Handling:
+    503 Service Unavailable: returned if required model not loaded at startup.
+    500 Internal Server Error: returned with str(e) detail on prediction errors.
+    400 Bad Request: returned if compliance endpoint receives no parseable text.
+
+
+================================================================================
+   CHAPTER 6: FRONTEND DESIGN AND REACT ARCHITECTURE
+================================================================================
+
+6.1 Routing and Pages
+-----------------------
+
+  Route                | Component            | Description
+  ---------------------+----------------------+----------------------------------
+  /login               | Login.jsx            | Auth: email/password + Google OAuth
+  /dashboard           | Dashboard.jsx        | Stats overview and trend charts
+  /scanners/phishing   | PhishingScanner.jsx  | URL input + ML result display
+  /scanners/invoice    | InvoiceScanner.jsx   | File upload + OCR + verdict panel
+  /scanners/compliance | ComplianceScanner.jsx| Text/file + clause-level analysis
+  /history             | History.jsx          | Real-time scan history + delete
+
+6.2 Authentication and Protected Routes
+-----------------------------------------
+  AuthContext.jsx provides a React Context with:
+    currentUser:      Firebase Auth User object (null if unauthenticated)
+    loading:          Boolean - true during initial onAuthStateChanged check
+    login(email, pw): Firebase signInWithEmailAndPassword
+    loginWithGoogle(): Firebase signInWithPopup with GoogleAuthProvider
+    logout():         Firebase signOut
+
+  ProtectedRoute.jsx:
+    Checks currentUser after loading completes.
+    Renders <Navigate to="/login" /> if null.
+    Renders child components if authenticated.
+
+6.3 Firebase Integration
+--------------------------
+  firebase.js:
+    initializeApp(firebaseConfig) with VITE_ env variables.
+    Exports: auth, db, storage.
+
+  firestoreService.js functions:
+    createScanRecord(scanData)
+      Writes to 'scans' collection with serverTimestamp.
+      Falls back to localStorage saveLocalScan on failure.
+
+    getRecentScans(userId, limitCount=10)
+      Queries 'scans' collection filtered by userId, ordered by createdAt desc.
+      Falls back to localStorage on empty result or query failure.
+
+    subscribeToUserScans(userId, callback, limitCount=50)
+      Creates onSnapshot real-time listener on 'scans' collection.
+      Also registers a local callback in localScanListeners Set.
+      Returns unsubscribe function that cleans up both listeners.
+
+    deleteScanRecord(scanId)
+      Calls deleteDoc on Firestore and removes from localStorage simultaneously.
+
+  storageService.js (current state):
+    Bypasses Firebase Storage network request entirely.
+    Simulates upload progress (25% -> 60% -> 100% with 100-120ms delays).
+    Returns { downloadURL: URL.createObjectURL(file), filePath }.
+    Cloud upload code preserved in comments for future activation.
+
+6.4 Service Layer
+------------------
+  apiClient.js (Axios):
+    baseURL: import.meta.env.VITE_API_BASE_URL || '/api'
+    timeout: 30000ms
+    Response interceptor:
+      On 502/503/504: wait 2 seconds, retry once (_retry flag).
+      On network error: returns "Network Error: Could not reach ML engine."
+      On server error: returns "Server Error (STATUS): ML pipeline error."
+
+
+================================================================================
+   CHAPTER 7: SYSTEM, SOFTWARE, AND HARDWARE REQUIREMENTS
+================================================================================
+
+7.1 Hardware Requirements
+---------------------------
+
+  Component       | Minimum Specification   | Recommended Specification
+  ----------------+-------------------------+----------------------------------
+  Processor (CPU) | Dual-core 2.0 GHz       | Quad-core 2.5 GHz or higher
+  Memory (RAM)    | 4 GB                    | 8 GB (16 GB for model training)
+  Storage         | 2 GB available          | 5 GB (models + node_modules)
+  Internet        | Required (Firebase)     | Stable broadband connection
+  GPU             | Not required            | Not applicable (CPU inference)
+  Operating System| Windows 10 / Ubuntu 20  | Windows 11 / Ubuntu 22 / macOS 13
+
+7.2 Backend Python Dependencies (backend/requirements.txt)
+----------------------------------------------------------
+
+  Package           | Purpose in SentryFi
+  ------------------+------------------------------------------------------------
+  fastapi           | Python web framework for building REST APIs. Provides
+                    | automatic request validation, OpenAPI docs, and async support.
+  uvicorn           | ASGI web server. Serves the FastAPI application in production.
+  pydantic          | Data validation library. Defines and validates all API
+                    | request/response schemas (PhishingRequest, PhishingResponse).
+  pdfplumber        | PDF text extraction. Parses invoice and compliance PDFs
+                    | page-by-page in the OCR service and compliance endpoint.
+  pypdf             | Low-level PDF manipulation library. Supplementary to pdfplumber.
+  pytesseract       | Python wrapper for Tesseract OCR engine. Extracts text from
+                    | image-format invoices (PNG, JPG) via Pillow image loading.
+  pillow            | Python Imaging Library. Opens and preprocesses images before
+                    | passing them to pytesseract for OCR.
+  python-multipart  | Enables FastAPI to parse multipart/form-data (file uploads)
+                    | from the React frontend's FormData submissions.
+  pytest            | Testing framework for all backend unit and integration tests.
+  httpx             | Async HTTP client. Used as FastAPI's TestClient in pytest.
+  scikit-learn      | Core ML library. Provides: RandomForestClassifier,
+                    | IsolationForest, LogisticRegression, TfidfVectorizer,
+                    | Pipeline, BaseEstimator, TransformerMixin, train_test_split,
+                    | and all evaluation metrics (accuracy, precision, recall, F1).
+  xgboost           | Gradient boosting library. Installed for future model
+                    | enhancement as an alternative to Random Forest.
+  joblib            | Python object serialization. Saves trained sklearn Pipelines
+                    | and models to .joblib files; loads them at API startup.
+  numpy             | Numerical computing. Array operations, random data generation,
+                    | synthetic dataset construction.
+  pandas            | DataFrame library. Structures feature dictionaries into
+                    | DataFrames for IsolationForest input.
+  tldextract        | Accurate TLD/domain/subdomain extraction from URLs. Used in
+                    | URLFeatureExtractor for the has_suspicious_tld feature.
+  scipy             | Scientific computing. Statistical distributions (Exponential,
+                    | Uniform, Binomial) for synthetic training data generation.
+
+7.3 Frontend JavaScript Dependencies (package.json)
+----------------------------------------------------
+
+  RUNTIME DEPENDENCIES:
+  Package           | Version    | Purpose
+  ------------------+------------+----------------------------------------------
+  react             | ^18.2.0    | Core React UI library with concurrent features.
+  react-dom         | ^18.2.0    | React renderer targeting the browser DOM.
+  react-router-dom  | ^6.22.0    | Client-side routing. Uses nested routes, Outlet,
+                    |            | Navigate, and useNavigate for SPA navigation.
+  firebase          | ^10.12.0   | Firebase Web SDK v10. Provides Authentication
+                    |            | (email/Google), Firestore, and Storage clients.
+  axios             | ^1.6.0     | Promise-based HTTP client for REST API calls with
+                    |            | interceptors for retry and error formatting.
+  recharts          | ^2.12.0    | React charting library. LineChart and BarChart
+                    |            | used in Dashboard for risk trend visualization.
+  lucide-react      | ^0.395.0   | SVG icon library providing all UI icons
+                    |            | (UploadCloud, FileText, CheckCircle, AlertTriangle).
+  clsx              | ^2.1.1     | Utility for conditional CSS class merging in JSX.
+  tailwind-merge    | ^2.3.0     | Resolves TailwindCSS class conflicts intelligently.
+  browserslist      | ^4.28.8    | Defines target browser support for build tools.
+  caniuse-lite      | ^1.0.x     | CSS browser compatibility database.
+
+  DEVELOPMENT DEPENDENCIES:
+  Package           | Version    | Purpose
+  ------------------+------------+----------------------------------------------
+  vite              | ^5.2.0     | Build tool and dev server with HMR support.
+  @vitejs/plugin-react | ^4.2.1  | Vite plugin enabling React Fast Refresh.
+  tailwindcss       | ^3.4.4     | Utility-first CSS framework.
+  postcss           | ^8.4.38    | CSS post-processor required by Tailwind.
+  autoprefixer      | ^10.4.19   | Adds vendor-prefixed CSS properties automatically.
+  @types/react      | ^18.2.66   | TypeScript definitions for React.
+  @types/react-dom  | ^18.2.22   | TypeScript definitions for ReactDOM.
+
+
+================================================================================
+   CHAPTER 8: RESULTS, KEY LEARNINGS, AND OBSERVATIONS
+================================================================================
+
+8.1 Model Performance Summary
+-------------------------------
+
+  Model                    | Algorithm              | Training Set | Notes
+  -------------------------+------------------------+--------------+------------
+  Phishing URL Classifier  | Random Forest          | 10,000 URLs  | Accuracy
+                           | (100 trees, depth 10)  | synthetic    | ~95% on
+                           |                        | 80/20 split  | synthetic
+  Invoice Anomaly Detector | Isolation Forest       | 10,000 rows  | Contamination
+                           | (100 trees)            | synthetic    | = 0.10
+                           |                        | no split     | threshold
+  Compliance NLP Classifier| TF-IDF + Logistic      | 5,000 clauses| Balanced
+                           | Regression             | synthetic    | class weights
+                           |                        | 80/20 split  | 5-class
+
+  Model Sizes:
+    phishing_model.joblib   : 105,250 bytes  (~103 KB)
+    invoice_model.joblib    : 873,545 bytes  (~853 KB, largest due to forest size)
+    compliance_model.joblib :  29,748 bytes  (~29 KB, TF-IDF vocab is compact)
+
+  Note: All models trained on synthetic data optimized for realistic statistical
+  distributions. Performance on real-world data would improve significantly with
+  actual labeled datasets from financial institutions.
+
+8.2 Key Learnings
+------------------
+
+  1. END-TO-END ML SYSTEM DESIGN
+     Building a complete ML platform requires skills far beyond model training:
+     feature engineering, serialization, API contract design, and fallback
+     strategies are equally important as model accuracy.
+
+  2. SCIKIT-LEARN PIPELINE PATTERN
+     Encapsulating preprocessing + classification inside sklearn Pipeline is
+     essential. It serializes the complete transform chain into one .joblib
+     file, eliminating training/serving skew - a critical production concern.
+
+  3. UNSUPERVISED ANOMALY DETECTION (ISOLATION FOREST)
+     IsolationForest is ideal for invoice fraud because labeled fraud samples
+     are scarce. The algorithm leverages the principle that anomalies are
+     "few and different" - they are easier to isolate in random partitioning
+     trees (shorter path length = higher anomaly score).
+
+  4. NLP FEATURE ENGINEERING WITH TF-IDF
+     TF-IDF with bigrams (ngram_range=(1,2)) is surprisingly effective for
+     short regulatory clause classification. Bigrams capture key phrases
+     like "offshore account", "audit logs", and "shell company" that carry
+     strong classification signal.
+
+  5. OCR IN PRODUCTION ENVIRONMENTS
+     pdfplumber works well for digitally created PDFs but returns empty text
+     for scanned/image-based PDFs. For those, pytesseract (Tesseract engine)
+     is required but depends on a system-level Tesseract binary installation.
+     Production systems should use cloud OCR (Google Document AI, AWS Textract)
+     for higher accuracy and reliability.
+
+  6. FIREBASE CORS AND CLOUD CONFIGURATION
+     Firebase Storage requires explicit CORS policy via gsutil - this cannot
+     be configured through the Firebase Console UI alone. The disconnect
+     between Firebase Console features and Google Cloud Console features is
+     a common source of confusion in production deployments.
+
+  7. REAL-TIME STATE WITH FIRESTORE LISTENERS
+     Firebase onSnapshot creates a persistent connection enabling true
+     real-time UI updates. Combining this with a custom local event bus
+     (JavaScript Set of callbacks) provides consistent behavior whether
+     Firestore is available or not.
+
+  8. AXIOS INTERCEPTORS FOR ML BACKEND RESILIENCE
+     ML backends often experience cold starts (model loading delays) that
+     cause initial 503 errors. An automatic retry interceptor with a 2-second
+     delay transparently handles this, significantly improving perceived
+     reliability without any UI changes.
+
+  9. GRACEFUL DEGRADATION ARCHITECTURE
+     Every integration point (Firebase Storage, Firestore, ML backend) has
+     a documented fallback. This "graceful degradation" pattern ensures the
+     application remains functional in partial failure scenarios, which is
+     especially important during development and deployment transitions.
+
+ 10. PYDANTIC FOR API CONTRACTS
+     FastAPI's tight integration with Pydantic enforces request/response
+     schemas at runtime, provides automatic input validation, and generates
+     OpenAPI documentation without additional effort.
+
+8.3 Challenges Overcome
+------------------------
+
+  Challenge 1: Firebase Storage CORS Block
+    Problem : Firebase Storage blocked all upload requests from localhost:5173.
+              The error "Response to preflight request doesn't pass access
+              control check" is a server-side rejection of browser CORS preflight.
+    Solution: Bypassed the network request entirely using URL.createObjectURL()
+              as the storage URL. The cloud upload code is preserved in comments
+              in storageService.js. A cors.json file was prepared for future
+              deployment via gsutil cors set command.
+
+  Challenge 2: joblib Deserialization of Custom Sklearn Transformer
+    Problem : Loading phishing_model.joblib failed with "Cannot find class
+              URLFeatureExtractor" because it was defined in a training script,
+              not an importable Python module.
+    Solution: model_loader.py dynamically adds the ml/ directory to sys.path
+              and injects URLFeatureExtractor into __main__.__dict__ before
+              calling joblib.load(), satisfying Python's pickle deserialization
+              class lookup mechanism.
+
+  Challenge 3: Dual Content-Type Compliance Endpoint
+    Problem : The compliance scanner needed to accept both plain text (JSON)
+              from a textarea and file uploads (multipart/form-data) from
+              a file input - two completely different HTTP content types.
+    Solution: Inspected request.headers["content-type"] at runtime to branch
+              the parsing logic within a single FastAPI endpoint handler.
+
+  Challenge 4: Firestore Composite Index Requirement
+    Problem : Combined where() + orderBy() Firestore queries require pre-built
+              composite indexes in Firebase Console or they return index errors.
+    Solution: The localStorage fallback transparently provides equivalent data
+              when Firestore queries fail. Index creation links are provided in
+              Firestore error messages for when this is needed in production.
+
+  Challenge 5: Invoice Model Feature Alignment
+    Problem : Feature names in the training DataFrame must exactly match those
+              used during inference. A single key mismatch causes a silent
+              prediction failure or ValueError.
+    Solution: Both ocr_service.py and train_invoice.py use the same explicit
+              feature dict keys: tax_to_subtotal_ratio, line_item_sum_delta,
+              round_amount_score, amount_z_score.
+
+8.4 Future Roadmap
+--------------------
+
+  Short-Term (1-3 months):
+  1. Configure Firebase Storage CORS via gsutil and re-enable cloud uploads.
+  2. Add composite indexes in Firestore for production query performance.
+  3. Replace Tesseract OCR with Google Document AI for higher accuracy.
+
+  Medium-Term (3-6 months):
+  4. Train Phishing model on real PhishTank and OpenPhish labeled datasets.
+  5. Train Compliance model on the CUAD (Contract Understanding Atticus
+     Dataset) for real legal clause classification.
+  6. Add XGBoost as an ensemble alternative for phishing classification.
+  7. Implement SHAP (SHapley Additive exPlanations) for prediction explainability.
+
+  Long-Term (6-12 months):
+  8. Add organization-level admin panel for aggregate threat analytics.
+  9. Containerize backend with Docker for reproducible cloud deployments.
+ 10. Implement WebSocket-based real-time inference progress updates.
+ 11. Add batch upload mode for scanning multiple invoices simultaneously.
+ 12. Implement user-defined risk thresholds and alert notification emails.
+
+
+================================================================================
+   CHAPTER 9: CONCLUSION
+================================================================================
+
+SentryFi demonstrates a comprehensive, end-to-end application of modern AI and
+machine learning techniques to real-world financial security challenges. The
+platform successfully integrates three distinct ML paradigms:
+
+  - Supervised Classification (Random Forest) for phishing URL detection
+  - Unsupervised Anomaly Detection (Isolation Forest) for invoice fraud
+  - NLP Text Classification (TF-IDF + Logistic Regression) for compliance
+
+These are unified within a production-quality full-stack architecture using
+React 18, FastAPI, Firebase, and Vite. The system demonstrates professional
+software engineering practices throughout: clean separation of concerns,
+environment-based configuration, graceful fallback at every integration point,
+real-time data synchronization, and a resilient API client with retry logic.
+
+This internship provided invaluable hands-on experience with the complete ML
+system lifecycle -- from data generation and feature engineering through model
+training, serialization, REST API exposure, and full frontend integration. The
+challenges encountered (CORS configuration, joblib deserialization, dual
+content-type routing, Firestore indexes) and their engineering solutions reflect
+real problems encountered in production ML systems at scale.
+
+SentryFi serves as a deployable foundation that can evolve into an enterprise
+financial security product with real-world datasets, cloud infrastructure
+hardening, and expanded detection capabilities.
+
+
+================================================================================
+   CHAPTER 10: REFERENCES
+================================================================================
+
+[1]  FastAPI Official Documentation
+     https://fastapi.tiangolo.com/
+
+[2]  scikit-learn User Guide - Ensemble Methods
+     https://scikit-learn.org/stable/modules/ensemble.html
+
+[3]  scikit-learn - IsolationForest
+     https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.IsolationForest.html
+
+[4]  scikit-learn - TfidfVectorizer
+     https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfVectorizer.html
+
+[5]  scikit-learn - Pipeline
+     https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html
+
+[6]  Firebase Authentication Web Documentation
+     https://firebase.google.com/docs/auth/web/start
+
+[7]  Firebase Firestore Web Documentation
+     https://firebase.google.com/docs/firestore/
+
+[8]  Firebase Storage CORS Configuration
+     https://firebase.google.com/docs/storage/web/download-files#cors_configuration
+
+[9]  pdfplumber - PDF Text and Table Extraction
+     https://github.com/jsvine/pdfplumber
+
+[10] pytesseract - Python Tesseract OCR Wrapper
+     https://github.com/madmaze/pytesseract
+
+[11] React Router v6 Documentation
+     https://reactrouter.com/en/main
+
+[12] Vite Build Tool Documentation
+     https://vitejs.dev/guide/
+
+[13] Recharts - React Charting Library
+     https://recharts.org/en-US/
+
+[14] Axios HTTP Client Documentation
+     https://axios-http.com/docs/intro
+
+[15] Shannon, C.E. (1948). "A Mathematical Theory of Communication."
+     Bell System Technical Journal, 27(3), 379-423.
+
+[16] PhishTank - Community Phishing Dataset
+     https://phishtank.org/
+
+[17] CUAD - Contract Understanding Atticus Dataset
+     https://www.atticusprojectai.org/cuad
+
+[18] Kaggle - Credit Card Fraud Detection Dataset
+     https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
+
+[19] U.S. Securities and Exchange Commission - SOX Overview
+     https://www.sec.gov/about/offices/oca/soxreference.htm
+
+[20] FATF - Anti-Money Laundering Recommendations
+     https://www.fatf-gafi.org/en/topics/fatf-recommendations.html
+
+[21] tldextract Python Library
+     https://github.com/john-kurkowski/tldextract
+
+[22] Google Cloud gsutil CORS Configuration
+     https://cloud.google.com/storage/docs/configuring-cors
+
+[23] joblib Documentation - Parallel Computing and Persistence
+     https://joblib.readthedocs.io/en/latest/
+
+[24] Vercel Deployment Documentation
+     https://vercel.com/docs
+
+================================================================================
+   END OF REPORT
+
+   SentryFi - Intelligent Financial Threat and Compliance Detection Platform
+   DLithe Consultancy Services Pvt. Ltd.
+   Supervisor: Ms. Dhanlakshmi S Jangalekar
+   August 2026
+================================================================================

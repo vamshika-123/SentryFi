@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { uploadScanDocument } from '../../services/storageService';
 import { createScanRecord } from '../../services/firestoreService';
 import apiClient from '../../services/apiClient';
 import { UploadCloud, FileText, CheckCircle, AlertTriangle, Loader2, FileWarning } from 'lucide-react';
@@ -34,21 +33,17 @@ export default function InvoiceScanner() {
     setUploadProgress(0);
 
     try {
-      setStatusMsg('Uploading document securely...');
-      const { downloadURL, filePath } = await uploadScanDocument(
-        file, 
-        currentUser.uid, 
-        'invoices',
-        (progress) => setUploadProgress(progress)
-      );
-
       setStatusMsg('Extracting OCR & detecting anomalies...');
       
       const formData = new FormData();
       formData.append('file', file);
       
       const response = await apiClient.post('/v1/scan/invoice', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        }
       });
       
       const data = response.data;
@@ -60,8 +55,8 @@ export default function InvoiceScanner() {
         userEmail: currentUser.email,
         type: 'invoice',
         targetName: file.name,
-        fileUrl: downloadURL,
-        filePath: filePath,
+        fileUrl: null,
+        filePath: null,
         riskScore: data.riskScore,
         verdict: data.verdict,
         confidence: 100, // IF doesn't return confidence easily
@@ -189,11 +184,11 @@ export default function InvoiceScanner() {
               <div className="space-y-3 font-mono text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Subtotal:</span>
-                  <span className="text-slate-200">${result.extractedFields?.subtotal?.toFixed(2) || '0.00'}</span>
+                  <span className="text-slate-200">₹{result.extractedFields?.subtotal?.toFixed(2) || '0.00'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Tax Amount:</span>
-                  <span className="text-slate-200">${result.extractedFields?.tax_amount?.toFixed(2) || '0.00'}</span>
+                  <span className="text-slate-200">₹{result.extractedFields?.tax_amount?.toFixed(2) || '0.00'}</span>
                 </div>
                 <div className="flex justify-between border-t border-slate-800 pt-2 mt-2">
                   <span className="text-slate-500">Line Item Delta:</span>
@@ -201,7 +196,7 @@ export default function InvoiceScanner() {
                     "font-bold",
                     result.extractedFields?.line_item_delta > 0 ? "text-danger" : "text-success"
                   )}>
-                    ${result.extractedFields?.line_item_delta?.toFixed(2) || '0.00'}
+                    ₹{result.extractedFields?.line_item_delta?.toFixed(2) || '0.00'}
                   </span>
                 </div>
                 <div className="flex justify-between">

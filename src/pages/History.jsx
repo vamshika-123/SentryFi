@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getRecentScans, deleteScanRecord } from '../services/firestoreService';
-import { deleteStorageFile } from '../services/storageService';
 import { Search, Filter, Trash2, ExternalLink, Download, FileText, Globe, Shield } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -36,9 +35,6 @@ export default function History() {
     
     try {
       await deleteScanRecord(scan.id);
-      if (scan.fileUrl && scan.filePath) {
-        await deleteStorageFile(scan.filePath).catch(e => console.log('File already deleted or not found'));
-      }
       setScans(scans.filter(s => s.id !== scan.id));
       setSelectedScan(null);
     } catch (error) {

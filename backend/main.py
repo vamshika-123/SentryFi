@@ -103,15 +103,21 @@ async def scan_invoice(file: UploadFile = File(...)):
         
     is_anomaly = pred == -1
     
+    # Rule-based override for perfectly clean invoices
+    if (features_dict.get("gst_rate_deviation", 0) < 0.01 and 
+        features_dict.get("item_sum_delta", 0) < 1.0 and 
+        features_dict.get("round_number_bias", 0) == 0):
+        is_anomaly = False
+    
     verdict = "SUSPICIOUS" if is_anomaly else "CLEAN"
     risk_score = 90.0 if is_anomaly else 10.0
     
     explanations = []
     if is_anomaly:
-        if features_dict.get("line_item_sum_delta", 0) > 0:
+        if features_dict.get("item_sum_delta", 0) > 0:
             explanations.append("Line items do not sum to total")
-        if features_dict.get("tax_to_subtotal_ratio", 0) > 0.15:
-            explanations.append("Unusual tax amount variance")
+        if features_dict.get("gst_rate_deviation", 0) > 0.05:
+            explanations.append("Unusual GST rate variance (expected standard slabs)")
             
     return {
         "extractedFields": features_dict,
@@ -191,3 +197,7 @@ async def scan_compliance(request: Request):
         "verdict": verdict,
         "flaggedClauses": flagged_clauses
     }
+
+# Trigger reload
+
+# Trigger reload 2
