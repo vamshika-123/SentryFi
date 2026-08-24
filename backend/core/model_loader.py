@@ -10,8 +10,9 @@ if ML_DIR not in sys.path:
     sys.path.append(ML_DIR)
 
 import __main__
-from train_phishing import URLFeatureExtractor
-__main__.URLFeatureExtractor = URLFeatureExtractor
+from train_phishing import URLFeatureExtractor, IsotonicCalibratedPipeline
+__main__.URLFeatureExtractor        = URLFeatureExtractor
+__main__.IsotonicCalibratedPipeline = IsotonicCalibratedPipeline
 
 class ModelRegistry:
     def __init__(self):
