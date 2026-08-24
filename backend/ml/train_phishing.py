@@ -743,7 +743,7 @@ if __name__ == "__main__":
     # model_loader.py loads it with joblib — URLFeatureExtractor is importable
     # from train_phishing, so deserialization works without changes.
     # predict_proba() on the loaded object returns calibrated probabilities.
-    joblib.dump(calibrated_model, model_path)
-    print(f"\nSaved calibrated phishing model to {model_path}")
+    joblib.dump(calibrated_model, model_path, compress=3)
+    print(f"\nSaved calibrated phishing model to {model_path} (compressed)")
     print("Training complete.")
 
